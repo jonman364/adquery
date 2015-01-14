@@ -4,11 +4,8 @@ using System.Collections.Generic;
 using System.Text;
 
 namespace adlib {
-    enum SearchType { UNKNOWN, USER, COMPUTER, GROUP };
-
     class Program {
         static void Main(string[] args) {
-            SearchType type = SearchType.UNKNOWN;
             bool readStdIn = false;
             bool format = true;
             List<string> terms = new List<string>();
@@ -19,13 +16,6 @@ namespace adlib {
                 printUsage();
                 return;
             }
-
-            if(args[0].Equals("computer", StringComparison.OrdinalIgnoreCase))
-                type = SearchType.COMPUTER;
-            else if(args[0].Equals("user", StringComparison.OrdinalIgnoreCase))
-                type = SearchType.USER;
-            else if(args[0].Equals("group", StringComparison.OrdinalIgnoreCase))
-                type = SearchType.GROUP;
 
 
             for (int i = 1; i < args.Length; i++) {
@@ -46,37 +36,13 @@ namespace adlib {
             if (readStdIn)
                 getStdIn(ref terms);
 
-
             if (terms.Count != inopts.Count) {
                 Console.WriteLine("The number of search terms does not match the number of attributes IN[{0}] TERMS[{1}]", inopts.Count, terms.Count);
                 return;
             }
 
-            StringBuilder filterStr;
-
-            if(type == SearchType.USER)
-                filterStr = new StringBuilder("(&(objectCategory=person)");
-            else if(type == SearchType.COMPUTER)
-                filterStr = new StringBuilder("(&(objectCategory=computer)");
-            else if(type == SearchType.GROUP)
-                filterStr = new StringBuilder("(&(objectCategory=group)");
-            else {
-                printUsage();
-                return;
-            }
-
-            for (int i = 0; i < inopts.Count; i++)
-                filterStr.Append(string.Format("({0}={1})", inopts[i], terms[i]));
-            filterStr.Append(")");
-
-            DirectorySearcher search = new DirectorySearcher();
-            search.Filter = filterStr.ToString();
-
-            foreach (string outopt in outopts)
-                search.PropertiesToLoad.Add(outopt);
-
             try {
-                SearchResultCollection results = search.FindAll();
+                SearchResultCollection results = Find(args[0], inopts.ToArray(), outopts.ToArray(), terms.ToArray());
 
                 for(int i = 0; i < results.Count; i++) {
                     for(int k = 0; k < outopts.Count; k++)
@@ -86,11 +52,39 @@ namespace adlib {
                         Console.WriteLine();
                 }
             }
+            catch(ArgumentException) {
+                printUsage();
+            }
             catch(System.Runtime.InteropServices.COMException) {
                 Console.WriteLine("COM exception: Are you logged into a domain account?");
             }
 
 
+        }
+
+        public static SearchResultCollection Find(string type, string[] inputFilter, string[] outputFilter, string[] arguments) {
+            StringBuilder filterStr;
+
+            if(type.Equals("user", StringComparison.OrdinalIgnoreCase))
+                filterStr = new StringBuilder("(&(objectCategory=person)");
+            else if(type.Equals("computer", StringComparison.OrdinalIgnoreCase))
+                filterStr = new StringBuilder("(&(objectCategory=computer)");
+            else if(type.Equals("group", StringComparison.OrdinalIgnoreCase))
+                filterStr = new StringBuilder("(&(objectCategory=group)");
+            else
+                throw new ArgumentException();
+
+            for(int i = 0; i < inputFilter.Length; i++) 
+                filterStr.Append(string.Format("({0}={1})", inputFilter[i], arguments[i]));
+            filterStr.Append(")");
+
+            DirectorySearcher search = new DirectorySearcher();
+            search.Filter = filterStr.ToString();
+
+            foreach(string output in outputFilter)
+                search.PropertiesToLoad.Add(output);
+
+            return search.FindAll();
         }
 
         static void getStdIn(ref List<string> opts){
